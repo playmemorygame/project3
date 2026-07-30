@@ -3,22 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Playlist & Track Selector</title>
+  <title>YouTube Link Vault & Local Stager</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f6f9; padding: 2rem 0; font-family: system-ui, -apple-system, sans-serif; }
-    .container { max-width: 850px; }
-    .track-card {
+    .container { max-width: 800px; }
+    .vault-card {
       background: #fff;
       border: 1px solid #e9ecef;
       border-radius: 10px;
       padding: 12px 16px;
       margin-bottom: 8px;
       transition: all 0.2s ease;
-      cursor: pointer;
     }
-    .track-card:hover { border-color: #0d6efd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .track-card.selected { background-color: #f0f7ff; border-color: #0d6efd; }
+    .vault-card:hover { border-color: #0d6efd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
     .sticky-bar {
       position: sticky;
       bottom: 20px;
@@ -29,374 +27,247 @@
       padding: 16px 20px;
       box-shadow: 0 10px 25px rgba(0,0,0,0.25);
     }
-    .saved-badge { font-size: 0.75rem; vertical-align: middle; }
+    .badge-saved { font-size: 0.75rem; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <div class="text-center mb-4">
-    <h2 class="fw-bold">🎵 YouTube Playlist Manager</h2>
-    <p class="text-muted">Extract full playlists, copy individual links, and sync state to local storage automatically.</p>
+    <h2 class="fw-bold">💾 YouTube Link Vault</h2>
+    <p class="text-muted">Save individual YouTube links to local storage as you browse, then copy or download them whenever you're ready.</p>
   </div>
 
-  <!-- Input Card -->
+  <!-- Add Link Input Card -->
   <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-4">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <label class="form-label fw-bold mb-0">Paste YouTube Playlist or Video Links:</label>
-        <div>
-          <span id="savedIndicator" class="badge bg-success saved-badge d-none">✓ Auto-Saved</span>
-          <button id="presetBtn" class="btn btn-outline-secondary btn-sm ms-2">⚡ Load Thatohatsi Preset</button>
-        </div>
+      <label class="form-label fw-bold">Add YouTube Link to Vault:</label>
+      <div class="input-group mb-2">
+        <input type="text" id="linkInput" class="form-control" placeholder="Paste single YouTube video link (or full playlist link)...">
+        <button id="addBtn" class="btn btn-primary fw-bold px-4">➕ Save Link</button>
       </div>
-      <textarea id="rawInput" class="form-control mb-3" rows="4" placeholder="Paste YouTube playlist URL (https://www.youtube.com/playlist?list=...) or individual video links here..."></textarea>
-      <div class="d-flex gap-2">
-        <button id="parseBtn" class="btn btn-primary flex-grow-1 fw-bold">
-          <span id="btnSpinner" class="spinner-border spinner-border-sm d-none me-2" role="status"></span>
-          Extract All Playlist Songs
-        </button>
-        <button id="clearStorageBtn" class="btn btn-outline-danger fw-bold" title="Clear saved playlist from browser storage">🗑️ Reset</button>
-      </div>
+      <small class="text-muted">Tip: You can also paste multiple links or messy text here—it will extract and save every link found into local storage.</small>
     </div>
   </div>
 
-  <!-- Selection Area -->
-  <div id="selectionArea" class="d-none">
+  <!-- Vault List Area -->
+  <div class="card shadow-sm border-0 p-4 mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="fw-bold mb-0">Loaded Songs (<span id="totalCount">0</span>)</h5>
-      <div>
-        <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-1">Select All</button>
-        <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">Deselect All</button>
+      <div class="d-flex align-items-center gap-2">
+        <h5 class="fw-bold mb-0">Staged Songs in Storage</h5>
+        <span id="vaultCount" class="badge bg-primary rounded-pill">0</span>
       </div>
+      <button id="clearVaultBtn" class="btn btn-outline-danger btn-sm fw-bold">🗑️ Clear All Saved</button>
     </div>
 
-    <div id="trackList" class="mb-4"></div>
+    <!-- Container for Saved Links -->
+    <div id="vaultList">
+      <div id="emptyMsg" class="text-center py-5 text-muted">
+        <p class="mb-0">Your vault is empty.</p>
+        <small>Paste a YouTube link above and click <strong>Save Link</strong> to store it locally.</small>
+      </div>
+    </div>
   </div>
 
-  <!-- Sticky Bottom Bar -->
+  <!-- Bottom Action Bar -->
   <div id="stickyBar" class="sticky-bar d-none">
-    <div class="row align-items-center g-2">
-      <div class="col-md-3">
-        <span class="fw-bold fs-5" id="selectedCount">0</span>
-        <span class="text-white-50">songs selected</span>
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <span class="fw-bold fs-5" id="totalStaged">0</span>
+        <span class="text-white-50 ms-1">song(s) stored in browser</span>
       </div>
-      <div class="col-md-5">
-        <select id="downloaderSelect" class="form-select form-select-sm bg-dark text-white border-secondary fw-bold">
-          <option value="ytdown" selected>⚡ Auto-Copy & Open YTDown (app.ytdown.to)</option>
-          <option value="ytdlp-bat">💻 Windows Auto-Downloader (.bat / yt-dlp)</option>
-          <option value="cobalt">🌐 Cobalt.tools</option>
-        </select>
-      </div>
-      <div class="col-md-4 d-flex gap-2 justify-content-end">
-        <button id="copyAllSelectedBtn" class="btn btn-outline-light btn-sm fw-bold">📋 Copy Selected</button>
-        <button id="runDownloadBtn" class="btn btn-success btn-sm fw-bold px-3">🚀 Launch Selected</button>
+      <div class="d-flex gap-2">
+        <button id="copyAllBtn" class="btn btn-outline-light btn-sm fw-bold">📋 Copy All Links</button>
+        <button id="downloadAllYtdownBtn" class="btn btn-success btn-sm fw-bold px-3">⚡ Send All to YTDown</button>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-  const STORAGE_KEY_TRACKS = 'yt_playlist_manager_tracks';
-  const STORAGE_KEY_RAW = 'yt_playlist_manager_raw';
+  const STORAGE_KEY = 'youtube_vault_links_v1';
 
-  const rawInput = document.getElementById('rawInput');
-  const parseBtn = document.getElementById('parseBtn');
-  const btnSpinner = document.getElementById('btnSpinner');
-  const presetBtn = document.getElementById('presetBtn');
-  const clearStorageBtn = document.getElementById('clearStorageBtn');
-  const savedIndicator = document.getElementById('savedIndicator');
-  const selectionArea = document.getElementById('selectionArea');
-  const trackList = document.getElementById('trackList');
+  const linkInput = document.getElementById('linkInput');
+  const addBtn = document.getElementById('addBtn');
+  const vaultList = document.getElementById('vaultList');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const vaultCount = document.getElementById('vaultCount');
+  const totalStaged = document.getElementById('totalStaged');
+  const clearVaultBtn = document.getElementById('clearVaultBtn');
   const stickyBar = document.getElementById('stickyBar');
-  const totalCount = document.getElementById('totalCount');
-  const selectedCount = document.getElementById('selectedCount');
-  const selectAllBtn = document.getElementById('selectAllBtn');
-  const deselectAllBtn = document.getElementById('deselectAllBtn');
-  const downloaderSelect = document.getElementById('downloaderSelect');
-  const runDownloadBtn = document.getElementById('runDownloadBtn');
-  const copyAllSelectedBtn = document.getElementById('copyAllSelectedBtn');
+  const copyAllBtn = document.getElementById('copyAllBtn');
+  const downloadAllYtdownBtn = document.getElementById('downloadAllYtdownBtn');
 
-  const THATOHATSI_PRESET = [
-    "https://www.youtube.com/watch?v=7Elq62H4vGo",
-    "https://www.youtube.com/watch?v=kYJ4a8S0Y4Y",
-    "https://www.youtube.com/watch?v=w6B-Q8T4P50"
-  ].join('\n');
+  // Load vault items from localStorage on startup
+  let vault = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
-  let tracks = [];
-
-  // Restore state from LocalStorage on page initialization
   window.addEventListener('DOMContentLoaded', () => {
-    loadStateFromStorage();
+    renderVault();
   });
 
-  presetBtn.addEventListener('click', () => {
-    rawInput.value = THATOHATSI_PRESET;
-    saveStateToStorage();
+  // Add Link Event
+  addBtn.addEventListener('click', () => {
+    addLinksFromText(linkInput.value);
   });
 
-  parseBtn.addEventListener('click', async () => {
-    const text = rawInput.value.trim();
-    if (!text) return alert('Please paste a YouTube playlist or video links first!');
-
-    setLoading(true);
-
-    try {
-      let extractedIds = [];
-
-      // Check if text contains a YouTube Playlist URL
-      const playlistMatch = text.match(/[?&]list=([a-zA-Z0-9_-]+)/);
-
-      if (playlistMatch) {
-        const playlistId = playlistMatch[1];
-        const playlistUrl = `https://www.youtube.com/playlist?list=${playlistId}`;
-        extractedIds = await fetchPlaylistVideosViaProxy(playlistUrl);
-      }
-
-      // Fallback/Supplementary: Parse direct video IDs from text
-      const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
-      let match;
-      while ((match = regex.exec(text)) !== null) {
-        if (!extractedIds.includes(match[1])) {
-          extractedIds.push(match[1]);
-        }
-      }
-
-      const uniqueIds = [...new Set(extractedIds)];
-
-      if (uniqueIds.length === 0) {
-        alert('No valid YouTube tracks found in the playlist/links.');
-        setLoading(false);
-        return;
-      }
-
-      tracks = uniqueIds.map(id => ({
-        id: id,
-        url: `https://www.youtube.com/watch?v=${id}`,
-        selected: true
-      }));
-
-      renderTracks();
-      saveStateToStorage();
-      selectionArea.classList.remove('d-none');
-      stickyBar.classList.remove('d-none');
-
-    } catch (err) {
-      alert('Error extracting playlist: ' + err.message);
-    } finally {
-      setLoading(false);
+  linkInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      addLinksFromText(linkInput.value);
     }
   });
 
-  // Extract all video IDs from a YouTube Playlist page via CORS Proxy
-  async function fetchPlaylistVideosViaProxy(playlistUrl) {
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(playlistUrl)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error('Unable to reach YouTube playlist source.');
-    const html = await response.text();
+  function addLinksFromText(text) {
+    if (!text.trim()) return alert('Please paste a YouTube link first!');
 
-    const ids = [];
-    const regex = /\/watch\?v=([a-zA-Z0-9_-]{11})/g;
+    // Extract all valid YouTube video IDs
+    const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
+    const matches = [];
     let match;
-    while ((match = regex.exec(html)) !== null) {
-      if (!ids.includes(match[1])) {
-        ids.push(match[1]);
-      }
+
+    while ((match = regex.exec(text)) !== null) {
+      matches.push(match[1]);
     }
-    return ids;
+
+    if (matches.length === 0) {
+      return alert('No valid YouTube video links found.');
+    }
+
+    let addedCount = 0;
+    matches.forEach(id => {
+      const fullUrl = `https://www.youtube.com/watch?v=${id}`;
+      // Prevent duplicates in storage
+      if (!vault.some(item => item.id === id)) {
+        vault.push({
+          id: id,
+          url: fullUrl,
+          addedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        addedCount++;
+      }
+    });
+
+    if (addedCount === 0) {
+      alert('These link(s) are already saved in your vault!');
+    } else {
+      saveToStorage();
+      renderVault();
+      linkInput.value = '';
+    }
   }
 
-  function renderTracks() {
-    trackList.innerHTML = '';
-    totalCount.textContent = tracks.length;
+  function renderVault() {
+    vaultCount.textContent = vault.length;
+    totalStaged.textContent = vault.length;
 
-    tracks.forEach((track, index) => {
+    if (vault.length === 0) {
+      emptyMsg.classList.remove('d-none');
+      vaultList.innerHTML = '';
+      vaultList.appendChild(emptyMsg);
+      stickyBar.classList.add('d-none');
+      return;
+    }
+
+    emptyMsg.classList.add('d-none');
+    stickyBar.classList.remove('d-none');
+    vaultList.innerHTML = '';
+
+    vault.forEach((item, index) => {
       const card = document.createElement('div');
-      card.className = `track-card d-flex justify-content-between align-items-center ${track.selected ? 'selected' : ''}`;
-      
+      card.className = 'vault-card d-flex justify-content-between align-items-center';
+
       card.innerHTML = `
-        <div class="d-flex align-items-center me-3" style="min-width: 0;">
-          <input type="checkbox" class="form-check-input me-3 fs-5" ${track.selected ? 'checked' : ''}>
-          <div class="text-truncate">
-            <span class="fw-bold me-2">Track ${index + 1}</span>
-            <small class="text-muted d-block text-truncate">${track.url}</small>
+        <div class="text-truncate me-3" style="min-width: 0;">
+          <div class="d-flex align-items-center gap-2">
+            <span class="fw-bold">Song ${index + 1}</span>
+            <span class="badge bg-light text-dark badge-saved border">Saved ${item.addedAt}</span>
           </div>
+          <small class="text-muted d-block text-truncate mt-1">${item.url}</small>
         </div>
         <div class="d-flex gap-2 align-items-center flex-shrink-0">
-          <button class="btn btn-outline-secondary btn-sm copy-single-btn" onclick="event.stopPropagation(); copySingleTrack('${track.url}', this);">📋 Copy Link</button>
-          <button class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation(); launchSingleInYTDown('${track.url}');">⚡ YTDown</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="copySingle('${item.url}', this)">📋 Copy Link</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="sendToYTDown('${item.url}')">⚡ YTDown</button>
+          <button class="btn btn-outline-danger btn-sm" onclick="removeItem('${item.id}')" title="Delete from vault">🗑️</button>
         </div>
       `;
 
-      const checkbox = card.querySelector('input[type="checkbox"]');
-      card.addEventListener('click', () => {
-        track.selected = !track.selected;
-        checkbox.checked = track.selected;
-        card.classList.toggle('selected', track.selected);
-        updateCounter();
-        saveStateToStorage();
-      });
-
-      checkbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        track.selected = checkbox.checked;
-        card.classList.toggle('selected', track.selected);
-        updateCounter();
-        saveStateToStorage();
-      });
-
-      trackList.appendChild(card);
+      vaultList.appendChild(card);
     });
-
-    updateCounter();
   }
 
-  function updateCounter() {
-    const count = tracks.filter(t => t.selected).length;
-    selectedCount.textContent = count;
-  }
-
-  // Copy individual song link
-  async function copySingleTrack(url, btnElement) {
+  // Copy single link
+  async function copySingle(url, btn) {
     try {
       await navigator.clipboard.writeText(url);
-      const originalText = btnElement.textContent;
-      btnElement.textContent = '✓ Copied!';
-      btnElement.classList.replace('btn-outline-secondary', 'btn-success');
+      const originalText = btn.textContent;
+      btn.textContent = '✓ Copied!';
+      btn.classList.replace('btn-outline-secondary', 'btn-success');
       setTimeout(() => {
-        btnElement.textContent = originalText;
-        btnElement.classList.replace('btn-success', 'btn-outline-secondary');
+        btn.textContent = originalText;
+        btn.classList.replace('btn-success', 'btn-outline-secondary');
       }, 1500);
+    } catch (e) {
+      alert('Failed to copy to clipboard.');
+    }
+  }
+
+  // Copy link & launch YTDown
+  async function sendToYTDown(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      window.open('https://app.ytdown.to/en38/', '_blank');
     } catch (e) {
       alert('Failed to copy link.');
     }
   }
 
-  // Copy single link & open YTDown directly
-  async function launchSingleInYTDown(url) {
+  // Remove single item from local storage
+  function removeItem(id) {
+    vault = vault.filter(item => item.id !== id);
+    saveToStorage();
+    renderVault();
+  }
+
+  // Clear all items from local storage
+  clearVaultBtn.addEventListener('click', () => {
+    if (vault.length === 0) return;
+    if (confirm('Are you sure you want to delete all saved links from your vault?')) {
+      vault = [];
+      saveToStorage();
+      renderVault();
+    }
+  });
+
+  // Copy all links in vault
+  copyAllBtn.addEventListener('click', async () => {
+    if (vault.length === 0) return;
+    const allUrls = vault.map(item => item.url).join('\n');
     try {
-      await navigator.clipboard.writeText(url);
-      window.open('https://app.ytdown.to/en38/', '_blank');
-    } catch (err) {
-      alert('Failed to copy link.');
-    }
-  }
-
-  selectAllBtn.addEventListener('click', () => {
-    tracks.forEach(t => t.selected = true);
-    renderTracks();
-    saveStateToStorage();
-  });
-
-  deselectAllBtn.addEventListener('click', () => {
-    tracks.forEach(t => t.selected = false);
-    renderTracks();
-    saveStateToStorage();
-  });
-
-  copyAllSelectedBtn.addEventListener('click', async () => {
-    const selected = tracks.filter(t => t.selected).map(t => t.url).join('\n');
-    if (!selected) return alert('No songs selected!');
-    try {
-      await navigator.clipboard.writeText(selected);
-      copyAllSelectedBtn.textContent = '✅ Copied All!';
-      setTimeout(() => copyAllSelectedBtn.textContent = '📋 Copy Selected', 1500);
-    } catch (err) {
-      alert('Failed to copy links.');
+      await navigator.clipboard.writeText(allUrls);
+      copyAllBtn.textContent = '✅ Copied All!';
+      setTimeout(() => copyAllBtn.textContent = '📋 Copy All Links', 1500);
+    } catch (e) {
+      alert('Failed to copy all links.');
     }
   });
 
-  // Local Storage Save & Restore Logic
-  function saveStateToStorage() {
-    localStorage.setItem(STORAGE_KEY_TRACKS, JSON.stringify(tracks));
-    localStorage.setItem(STORAGE_KEY_RAW, rawInput.value);
-    
-    savedIndicator.classList.remove('d-none');
-    setTimeout(() => savedIndicator.classList.add('d-none'), 2000);
-  }
+  // Batch download via YTDown with 2.5s stagger delay
+  downloadAllYtdownBtn.addEventListener('click', () => {
+    if (vault.length === 0) return;
 
-  function loadStateFromStorage() {
-    const savedRaw = localStorage.getItem(STORAGE_KEY_RAW);
-    const savedTracks = localStorage.getItem(STORAGE_KEY_TRACKS);
+    alert(`Opening ${vault.length} link(s) in YTDown. Each link will copy automatically right before its tab opens (2.5s delay per song to avoid rate limits).`);
 
-    if (savedRaw) rawInput.value = savedRaw;
-    if (savedTracks) {
-      try {
-        tracks = JSON.parse(savedTracks);
-        if (tracks.length > 0) {
-          renderTracks();
-          selectionArea.classList.remove('d-none');
-          stickyBar.classList.remove('d-none');
-        }
-      } catch (e) {
-        console.error('Failed to parse saved state:', e);
-      }
-    }
-  }
-
-  clearStorageBtn.addEventListener('click', () => {
-    if (confirm('Clear saved playlist and reset the tool?')) {
-      localStorage.removeItem(STORAGE_KEY_TRACKS);
-      localStorage.removeItem(STORAGE_KEY_RAW);
-      tracks = [];
-      rawInput.value = '';
-      selectionArea.classList.add('d-none');
-      stickyBar.classList.add('d-none');
-      trackList.innerHTML = '';
-    }
+    vault.forEach((item, index) => {
+      setTimeout(async () => {
+        try {
+          await navigator.clipboard.writeText(item.url);
+        } catch (err) {}
+        window.open('https://app.ytdown.to/en38/', '_blank');
+      }, index * 2500);
+    });
   });
 
-  function setLoading(isLoading) {
-    parseBtn.disabled = isLoading;
-    if (isLoading) {
-      btnSpinner.classList.remove('d-none');
-    } else {
-      btnSpinner.classList.add('d-none');
-    }
-  }
-
-  // Downloader Batch Dispatcher
-  runDownloadBtn.addEventListener('click', async () => {
-    const selected = tracks.filter(t => t.selected);
-    if (selected.length === 0) return alert('Please select at least one song!');
-
-    const choice = downloaderSelect.value;
-
-    if (choice === 'ytdown') {
-      selected.forEach((t, i) => {
-        setTimeout(async () => {
-          try {
-            await navigator.clipboard.writeText(t.url);
-          } catch (err) {}
-          window.open('https://app.ytdown.to/en38/', '_blank');
-        }, i * 2500);
-      });
-
-    } else if (choice === 'ytdlp-bat') {
-      let scriptContent = `@echo off\necho Downloading ${selected.length} songs as MP3...\n\n`;
-      selected.forEach(t => {
-        scriptContent += `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "%%(title)s.%%(ext)s" "${t.url}"\n`;
-      });
-      scriptContent += `\necho Done! All songs downloaded.\npause\n`;
-      triggerFileDownload(scriptContent, 'download_songs.bat', 'text/plain');
-
-    } else if (choice === 'cobalt') {
-      selected.forEach((t, i) => {
-        setTimeout(() => {
-          window.open(`https://cobalt.tools/#${encodeURIComponent(t.url)}`, '_blank');
-        }, i * 1000);
-      });
-    }
-  });
-
-  function triggerFileDownload(content, filename, type) {
-    const blob = new Blob([content], { type: type });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  function saveToStorage() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vault));
   }
 </script>
 </body>
