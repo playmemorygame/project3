@@ -17,7 +17,7 @@
 <body>
 <div class="container">
   <h1 class="text-center mb-3">⬇️ YouTube Bulk Downloader</h1>
-  <p class="text-center text-muted">Paste multiple YouTube links (one per line) – get direct download links instantly.</p>
+  <p class="text-center text-muted">Paste multiple YouTube links (one per line)</p>
 
   <div class="card shadow-sm mb-4">
     <div class="card-body">
@@ -29,7 +29,6 @@
   <div id="results" class="d-none">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <h5 class="mb-0">Your Videos</h5>
-      <button id="downloadAllBtn" class="btn btn-success btn-sm">⬇️ Download All (one by one)</button>
     </div>
     <div id="videoList"></div>
   </div>
@@ -38,17 +37,16 @@
 </div>
 
 <script>
-  // API endpoint – free and doesn't require a key (may change in the future)
-  const API_URL = 'https://loader.to/api/card/?format=mp4&url=';
+  // *** THIS IS THE CRITICAL CHANGE ***
+  // You CANNOT call loader.to directly from the browser due to CORS.
+  // You must call YOUR OWN backend server, which then interacts with YouTube or an API.
+  const MY_BACKEND_API = 'https://your-backend-server.com/api/get-download-link'; 
 
   const urlsTextarea = document.getElementById('urls');
   const fetchBtn = document.getElementById('fetchBtn');
   const resultsDiv = document.getElementById('results');
   const videoList = document.getElementById('videoList');
-  const downloadAllBtn = document.getElementById('downloadAllBtn');
   const globalError = document.getElementById('globalError');
-
-  let downloadLinks = [];  // store fetched links
 
   fetchBtn.addEventListener('click', async () => {
     const raw = urlsTextarea.value.trim();
@@ -57,14 +55,12 @@
     const urls = raw.split('\n').map(u => u.trim()).filter(u => u);
     if (urls.length === 0) return showGlobalError('No valid URLs found.');
 
-    // Reset UI
     fetchBtn.disabled = true;
     videoList.innerHTML = '';
-    downloadLinks = [];
     globalError.classList.add('d-none');
     resultsDiv.classList.remove('d-none');
 
-    // Create placeholder cards for each URL
+    // Create placeholder cards
     urls.forEach((url, index) => {
       const card = document.createElement('div');
       card.className = 'video-card d-flex align-items-center justify-content-between';
@@ -76,47 +72,55 @@
         </div>
         <div class="status">
           <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+          <span class="ms-2 small text-muted">Processing on server...</span>
         </div>
       `;
       videoList.appendChild(card);
     });
 
-    // Fetch each link sequentially to avoid overwhelming the API
+    // Process concurrently (or sequentially if your backend has rate limits)
     for (let i = 0; i < urls.length; i++) {
-      const url = urls[i];
-      try {
-        const response = await fetch(API_URL + encodeURIComponent(url));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-
-        if (data.success && data.link) {
-          downloadLinks.push({ url: data.link, title: data.title || `Video ${i+1}` });
-          updateCard(i, true, data.title || `Video ${i+1}`, data.link);
-        } else {
-          throw new Error(data.message || 'Failed to fetch download link');
-        }
-      } catch (err) {
-        downloadLinks.push(null);
-        updateCard(i, false, null, null, err.message);
-      }
+        processVideo(urls[i], i);
     }
-
-    // Show download all button if at least one succeeded
-    if (downloadLinks.some(link => link)) {
-      downloadAllBtn.classList.remove('d-none');
-    } else {
-      downloadAllBtn.classList.add('d-none');
-    }
+    
     fetchBtn.disabled = false;
   });
+
+  async function processVideo(url, index) {
+      try {
+        // We POST the URL to our backend
+        const response = await fetch(MY_BACKEND_API, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ youtubeUrl: url })
+        });
+        
+        if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+        const data = await response.json();
+
+        // We expect our backend to handle the polling and return the final direct link
+        if (data.success && data.downloadUrl) {
+          updateCard(index, true, data.title || `Video ${index+1}`, data.downloadUrl);
+        } else {
+          throw new Error(data.message || 'Failed to generate link');
+        }
+      } catch (err) {
+        updateCard(index, false, null, null, err.message);
+      }
+  }
 
   function updateCard(index, success, title, link, errorMsg) {
     const card = document.getElementById(`card-${index}`);
     const statusDiv = card.querySelector('.status');
+    
+    // Notice I removed the "Download All" functionality, as browsers heavily restrict programmatic multi-downloads.
+    // It is much better UX to have the user click individual download buttons.
     if (success) {
       statusDiv.innerHTML = `
-        <a href="${link}" class="btn btn-outline-primary btn-sm me-2" download>Download</a>
-        <small class="text-success">✓ ${escapeHtml(title)}</small>
+        <a href="${link}" target="_blank" class="btn btn-outline-primary btn-sm me-2">Download</a>
+        <small class="text-success">✓ Ready</small>
       `;
     } else {
       statusDiv.innerHTML = `<span class="error">❌ ${escapeHtml(errorMsg)}</span>`;
@@ -142,24 +146,6 @@
     globalError.textContent = msg;
     globalError.classList.remove('d-none');
   }
-
-  // "Download All" triggers each download link in a new tab (modern browsers may block multiple popups)
-  // Better: download sequentially with a small delay or use an invisible iframe trick.
-  downloadAllBtn.addEventListener('click', () => {
-    const validLinks = downloadLinks.filter(link => link);
-    if (validLinks.length === 0) return;
-    // Use a hidden iframe to start downloads sequentially
-    validLinks.forEach((item, i) => {
-      setTimeout(() => {
-        const a = document.createElement('a');
-        a.href = item.url;
-        a.download = ''; // suggest download
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }, i * 800); // 0.8 second gap to avoid browser blocking
-    });
-  });
 </script>
 </body>
-  </html>
+</html>
