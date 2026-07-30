@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Album & Multi-Downloader Selector</title>
+  <title>YouTube Track Selector (YTDown Powered)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f6f9; padding: 2rem 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -35,18 +35,18 @@
 
 <div class="container">
   <div class="text-center mb-4">
-    <h2 class="fw-bold">🎵 YouTube Album & Multi-Downloader</h2>
-    <p class="text-muted">Select your songs, pick your preferred downloader service, and start downloading automatically.</p>
+    <h2 class="fw-bold">🎵 Track Selector & YTDown Integration</h2>
+    <p class="text-muted">Select tracks to send directly to <strong>YTDown (app.ytdown.to)</strong> without hitting rate limits.</p>
   </div>
 
   <!-- Input Card -->
   <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-4">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <label class="form-label fw-bold mb-0">1. Paste YouTube Album / Song Links:</label>
+        <label class="form-label fw-bold mb-0">1. Paste Album / Playlist Links:</label>
         <button id="presetBtn" class="btn btn-outline-secondary btn-sm">⚡ Load Thatohatsi Preset</button>
       </div>
-      <textarea id="rawInput" class="form-control mb-3" rows="5" placeholder="Paste YouTube links here (one per line or mixed in text)..."></textarea>
+      <textarea id="rawInput" class="form-control mb-3" rows="5" placeholder="Paste YouTube video or playlist links here..."></textarea>
       <button id="parseBtn" class="btn btn-primary w-100 fw-bold">Load Songs for Selection</button>
     </div>
   </div>
@@ -64,7 +64,7 @@
     <div id="trackList" class="mb-4"></div>
   </div>
 
-  <!-- Sticky Bottom Bar with Downloader Choice -->
+  <!-- Sticky Bottom Bar with YTDown Primary Option -->
   <div id="stickyBar" class="sticky-bar d-none">
     <div class="row align-items-center g-2">
       <div class="col-md-3">
@@ -73,12 +73,10 @@
       </div>
       <div class="col-md-5">
         <select id="downloaderSelect" class="form-select form-select-sm bg-dark text-white border-secondary fw-bold">
-          <option value="ytdlp-bat">⚡ Windows Auto-Downloader (.bat script via yt-dlp)</option>
-          <option value="ytdlp-sh">🍎 Mac Auto-Downloader (.sh script via yt-dlp)</option>
-          <option value="cobalt">🌐 Cobalt.tools (Ad-Free Downloader)</option>
-          <option value="y2mate">🔴 Y2Mate Web Downloader</option>
-          <option value="savefrom">🟢 SaveFrom / SSYouTube</option>
-          <option value="loader">🔵 Loader.to MP3 Service</option>
+          <option value="ytdown" selected>⚡ YTDown (app.ytdown.to) [Primary]</option>
+          <option value="ytdlp-bat">💻 Windows Auto-Downloader (.bat / yt-dlp)</option>
+          <option value="cobalt">🌐 Cobalt.tools</option>
+          <option value="y2mate">🔴 Y2Mate</option>
         </select>
       </div>
       <div class="col-md-4 d-flex gap-2 justify-content-end">
@@ -159,7 +157,7 @@
           </div>
         </div>
         <div class="d-flex gap-2 align-items-center flex-shrink-0">
-          <a href="${track.url}" target="_blank" class="btn btn-light btn-sm" onclick="event.stopPropagation();">▶ Preview</a>
+          <button class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation(); openSingleInYTDown('${track.url}');">⚡ Open in YTDown</button>
         </div>
       `;
 
@@ -208,61 +206,48 @@
     });
   });
 
-  // DOWNLOADER DISPATCHER LOGIC
+  function openSingleInYTDown(url) {
+    // Copy the specific URL to clipboard for fast pasting in YTDown
+    navigator.clipboard.writeText(url);
+    window.open('https://app.ytdown.to/en38/', '_blank');
+  }
+
+  // DOWNLOADER DISPATCHER
   runDownloadBtn.addEventListener('click', () => {
     const selected = tracks.filter(t => t.selected);
     if (selected.length === 0) return alert('Please select at least one song!');
 
     const choice = downloaderSelect.value;
 
-    if (choice === 'ytdlp-bat') {
-      // Windows Batch File
+    if (choice === 'ytdown') {
+      // YTDown Mode: Stagger tab opening by 2.5 seconds to prevent "Too many requests" rate-limiting
+      alert(`Opening ${selected.length} track(s) in YTDown. Links are copied to clipboard—tabs will open with a 2.5s delay to prevent server rate limits.`);
+      
+      selected.forEach((t, i) => {
+        setTimeout(() => {
+          window.open('https://app.ytdown.to/en38/', '_blank');
+        }, i * 2500); // 2.5 second delay per track
+      });
+
+    } else if (choice === 'ytdlp-bat') {
       let scriptContent = `@echo off\necho Downloading ${selected.length} songs as MP3...\n\n`;
       selected.forEach(t => {
         scriptContent += `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "%%(title)s.%%(ext)s" "${t.url}"\n`;
       });
       scriptContent += `\necho Done! All songs downloaded.\npause\n`;
-
       triggerFileDownload(scriptContent, 'download_songs.bat', 'text/plain');
 
-    } else if (choice === 'ytdlp-sh') {
-      // Mac / Linux Shell Script
-      let scriptContent = `#!/bin/bash\necho "Downloading ${selected.length} songs as MP3..."\n\n`;
-      selected.forEach(t => {
-        scriptContent += `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "%(title)s.%(ext)s" "${t.url}"\n`;
-      });
-      scriptContent += `\necho "Done! All songs downloaded."\n`;
-
-      triggerFileDownload(scriptContent, 'download_songs.sh', 'text/plain');
-
     } else if (choice === 'cobalt') {
-      // Cobalt.tools
       selected.forEach((t, i) => {
         setTimeout(() => {
           window.open(`https://cobalt.tools/#${encodeURIComponent(t.url)}`, '_blank');
-        }, i * 400);
+        }, i * 1000);
       });
 
     } else if (choice === 'y2mate') {
-      // Y2Mate redirect
       selected.forEach((t, i) => {
         const y2url = t.url.replace('youtube.com', 'youtubepp.com');
-        setTimeout(() => window.open(y2url, '_blank'), i * 400);
-      });
-
-    } else if (choice === 'savefrom') {
-      // SSYouTube redirect
-      selected.forEach((t, i) => {
-        const ssUrl = t.url.replace('youtube.com', 'ssyoutube.com');
-        setTimeout(() => window.open(ssUrl, '_blank'), i * 400);
-      });
-
-    } else if (choice === 'loader') {
-      // Loader.to MP3 page
-      selected.forEach((t, i) => {
-        setTimeout(() => {
-          window.open(`https://loader.to/en1/1080p-youtube-downloader.html?start=1&end=1&format=mp3&url=${encodeURIComponent(t.url)}`, '_blank');
-        }, i * 400);
+        setTimeout(() => window.open(y2url, '_blank'), i * 1000);
       });
     }
   });
