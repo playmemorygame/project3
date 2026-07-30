@@ -1,1 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Bulk Downloader</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; padding: 2rem 0; }
+    .container { max-width: 750px; }
+    textarea { resize: vertical; }
+    .video-card { background: white; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .spinner-border { width: 1.2rem; height: 1.2rem; }
+    .error { color: #dc3545; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1 class="text-center mb-3">⬇️ YouTube Bulk Downloader</h1>
+  <p class="text-center text-muted">Paste multiple YouTube links (one per line) – get direct download links instantly.</p>
 
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <textarea id="urls" class="form-control mb-3" rows="6" placeholder="https://www.youtube.com/watch?v=..."></textarea>
+      <button id="fetchBtn" class="btn btn-primary w-100">Fetch Download Links</button>
+    </div>
+  </div>
+
+  <div id="results" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Your Videos</h5>
+      <button id="downloadAllBtn" class="btn btn-success btn-sm">⬇️ Download All (one by one)</button>
+    </div>
+    <div id="videoList"></div>
+  </div>
+
+  <div id="globalError" class="alert alert-danger mt-3 d-none"></div>
+</div>
+
+<script>
+  // API endpoint – free and doesn't require a key (may change in the future)
+  const API_URL = 'https://loader.to/api/card/?format=mp4&url=';
+
+  const urlsTextarea = document.getElementById('urls');
+  const fetchBtn = document.getElementById('fetchBtn');
+  const resultsDiv = document.getElementById('results');
+  const videoList = document.getElementById('videoList');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
+  const globalError = document.getElementById('globalError');
+
+  let downloadLinks = [];  // store fetched links
+
+  fetchBtn.addEventListener('click', async () => {
+    const raw = urlsTextarea.value.trim();
+    if (!raw) return showGlobalError('Please paste at least one YouTube URL.');
+
+    const urls = raw.split('\n').map(u => u.trim()).filter(u => u);
+    if (urls.length === 0) return showGlobalError('No valid URLs found.');
+
+    // Reset UI
+    fetchBtn.disabled = true;
+    videoList.innerHTML = '';
+    downloadLinks = [];
+    globalError.classList.add('d-none');
+    resultsDiv.classList.remove('d-none');
+
+    // Create placeholder cards for each URL
+    urls.forEach((url, index) => {
+      const card = document.createElement('div');
+      card.className = 'video-card d-flex align-items-center justify-content-between';
+      card.id = `card-${index}`;
+      card.innerHTML = `
+        <div>
+          <span class="fw-bold">Video ${index + 1}</span>
+          <span class="ms-2 text-muted small">${shortenUrl(url)}</span>
+        </div>
+        <div class="status">
+          <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+        </div>
+      `;
+      videoList.appendChild(card);
+    });
+
+    // Fetch each link sequentially to avoid overwhelming the API
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      try {
+        const response = await fetch(API_URL + encodeURIComponent(url));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+
+        if (data.success && data.link) {
+          downloadLinks.push({ url: data.link, title: data.title || `Video ${i+1}` });
+          updateCard(i, true, data.title || `Video ${i+1}`, data.link);
+        } else {
+          throw new Error(data.message || 'Failed to fetch download link');
+        }
+      } catch (err) {
+        downloadLinks.push(null);
+        updateCard(i, false, null, null, err.message);
+      }
+    }
+
+    // Show download all button if at least one succeeded
+    if (downloadLinks.some(link => link)) {
+      downloadAllBtn.classList.remove('d-none');
+    } else {
+      downloadAllBtn.classList.add('d-none');
+    }
+    fetchBtn.disabled = false;
+  });
+
+  function updateCard(index, success, title, link, errorMsg) {
+    const card = document.getElementById(`card-${index}`);
+    const statusDiv = card.querySelector('.status');
+    if (success) {
+      statusDiv.innerHTML = `
+        <a href="${link}" class="btn btn-outline-primary btn-sm me-2" download>Download</a>
+        <small class="text-success">✓ ${escapeHtml(title)}</small>
+      `;
+    } else {
+      statusDiv.innerHTML = `<span class="error">❌ ${escapeHtml(errorMsg)}</span>`;
+    }
+  }
+
+  function shortenUrl(url) {
+    try {
+      const u = new URL(url);
+      return u.hostname + '/...' + url.slice(-15);
+    } catch {
+      return url;
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function showGlobalError(msg) {
+    globalError.textContent = msg;
+    globalError.classList.remove('d-none');
+  }
+
+  // "Download All" triggers each download link in a new tab (modern browsers may block multiple popups)
+  // Better: download sequentially with a small delay or use an invisible iframe trick.
+  downloadAllBtn.addEventListener('click', () => {
+    const validLinks = downloadLinks.filter(link => link);
+    if (validLinks.length === 0) return;
+    // Use a hidden iframe to start downloads sequentially
+    validLinks.forEach((item, i) => {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = item.url;
+        a.download = ''; // suggest download
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, i * 800); // 0.8 second gap to avoid browser blocking
+    });
+  });
+</script>
+</body>
+  </html>
