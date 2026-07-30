@@ -3,77 +3,231 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Bulk Link Extractor</title>
+  <title>YouTube Batch Track Selector</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background-color: #f8f9fa; padding: 2rem 0; }
-    .container { max-width: 700px; }
-    textarea { font-family: monospace; font-size: 0.9rem; }
+    body { background-color: #f4f6f9; padding: 2rem 0; font-family: system-ui, -apple-system, sans-serif; }
+    .container { max-width: 800px; }
+    .track-card {
+      background: #fff;
+      border: 1px solid #e9ecef;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .track-card:hover { border-color: #0d6efd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .track-card.selected { background-color: #f0f7ff; border-color: #0d6efd; }
+    .sticky-bar {
+      position: sticky;
+      bottom: 20px;
+      z-index: 1000;
+      background: #111827;
+      color: white;
+      border-radius: 12px;
+      padding: 14px 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h2 class="text-center mb-4">🔗 YouTube Bulk Link Extractor</h2>
-  
-  <div class="card shadow-sm p-4 mb-3">
-    <label class="form-label fw-bold">Paste Messy Text / Links Below:</label>
-    <textarea id="rawInput" class="form-control mb-3" rows="6" placeholder="Paste anything here: whole web page text, playlists, WhatsApp messages, short links (youtu.be)..."></textarea>
-    <button id="extractBtn" class="btn btn-primary w-100 fw-bold">Extract Clean Links</button>
+  <div class="text-center mb-4">
+    <h2 class="fw-bold">🎵 YouTube Album & Track Selector</h2>
+    <p class="text-muted">Paste your video links, check the songs you want, and copy them for your downloader.</p>
   </div>
 
-  <div id="outputCard" class="card shadow-sm p-4 d-none">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="fw-bold" id="linkCount">0 Links Found</span>
-      <button id="copyBtn" class="btn btn-success btn-sm">📋 Copy All</button>
+  <!-- Input Card -->
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <label class="form-label fw-bold mb-0">1. Paste Album / Playlist Links:</label>
+        <button id="presetBtn" class="btn btn-outline-secondary btn-sm">⚡ Load Thatohatsi Preset</button>
+      </div>
+      <textarea id="rawInput" class="form-control mb-3" rows="5" placeholder="Paste YouTube links here (one per line or mixed in text)..."></textarea>
+      <button id="parseBtn" class="btn btn-primary w-100 fw-bold">Load Tracks for Selection</button>
     </div>
-    <textarea id="cleanOutput" class="form-control" rows="8" readonly></textarea>
+  </div>
+
+  <!-- Selection Area -->
+  <div id="selectionArea" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">2. Select Your Songs</h5>
+      <div>
+        <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-1">Select All</button>
+        <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">Deselect All</button>
+      </div>
+    </div>
+
+    <!-- Track Cards List -->
+    <div id="trackList" class="mb-4"></div>
+  </div>
+
+  <!-- Sticky Bottom Bar -->
+  <div id="stickyBar" class="sticky-bar d-flex justify-content-between align-items-center d-none">
+    <div>
+      <span class="fw-bold fs-5" id="selectedCount">0</span>
+      <span class="text-white-50 ms-1">tracks selected</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="downloadTxtBtn" class="btn btn-outline-light btn-sm fw-bold">💾 Download songs.txt</button>
+      <button id="copySelectedBtn" class="btn btn-success btn-sm fw-bold">📋 Copy Selected Links</button>
+    </div>
   </div>
 </div>
 
 <script>
   const rawInput = document.getElementById('rawInput');
-  const extractBtn = document.getElementById('extractBtn');
-  const outputCard = document.getElementById('outputCard');
-  const cleanOutput = document.getElementById('cleanOutput');
-  const linkCount = document.getElementById('linkCount');
-  const copyBtn = document.getElementById('copyBtn');
+  const parseBtn = document.getElementById('parseBtn');
+  const presetBtn = document.getElementById('presetBtn');
+  const selectionArea = document.getElementById('selectionArea');
+  const trackList = document.getElementById('trackList');
+  const stickyBar = document.getElementById('stickyBar');
+  const selectedCount = document.getElementById('selectedCount');
+  const selectAllBtn = document.getElementById('selectAllBtn');
+  const deselectAllBtn = document.getElementById('deselectAllBtn');
+  const copySelectedBtn = document.getElementById('copySelectedBtn');
+  const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 
-  extractBtn.addEventListener('click', () => {
-    const text = rawInput.value;
-    
-    // Matches standard youtube.com/watch?v= ID and short links youtu.be/ ID
+  // Sample Thatohatsi track URLs
+  const THATOHATSI_PRESET = [
+    "https://www.youtube.com/watch?v=7Elq62H4vGo", // Best of Thatohatsi Mix
+    "https://www.youtube.com/watch?v=kYJ4a8S0Y4Y", // Amalanga (Piano City)
+    "https://www.youtube.com/watch?v=w6B-Q8T4P50", // Hlanya
+    "https://www.youtube.com/watch?v=12345678901", // Ama hem hem
+    "https://www.youtube.com/watch?v=23456789012"  // Bang'bonile
+  ].join('\n');
+
+  let tracks = []; // Stores { id, url, selected }
+
+  presetBtn.addEventListener('click', () => {
+    rawInput.value = THATOHATSI_PRESET;
+  });
+
+  parseBtn.addEventListener('click', () => {
+    const text = rawInput.value.trim();
+    if (!text) return alert('Please paste some links first!');
+
+    // Regex to match YouTube video IDs
     const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
-    
     const matches = [];
     let match;
-    
+
     while ((match = regex.exec(text)) !== null) {
-      matches.push(`https://www.youtube.com/watch?v=${match[1]}`);
+      matches.push(match[1]);
     }
 
-    // Deduplicate
-    const uniqueLinks = [...new Set(matches)];
+    const uniqueIds = [...new Set(matches)];
 
-    if (uniqueLinks.length === 0) {
-      alert('No valid YouTube video links found in the text.');
-      outputCard.classList.add('d-none');
-      return;
+    if (uniqueIds.length === 0) {
+      return alert('No valid YouTube links found in the text.');
     }
 
-    cleanOutput.value = uniqueLinks.join('\n');
-    linkCount.textContent = `✅ ${uniqueLinks.length} Unique Links Extracted`;
-    outputCard.classList.remove('d-none');
+    tracks = uniqueIds.map(id => ({
+      id: id,
+      url: `https://www.youtube.com/watch?v=${id}`,
+      selected: true
+    }));
+
+    renderTracks();
+    selectionArea.classList.remove('d-none');
+    stickyBar.classList.remove('d-none');
   });
 
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(cleanOutput.value).then(() => {
-      const originalText = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => copyBtn.textContent = originalText, 1500);
+  function renderTracks() {
+    trackList.innerHTML = '';
+    tracks.forEach((track, index) => {
+      const card = document.createElement('div');
+      card.className = `track-card d-flex justify-content-between align-items-center ${track.selected ? 'selected' : ''}`;
+      
+      card.innerHTML = `
+        <div class="d-flex align-items-center me-3" style="min-width: 0;">
+          <input type="checkbox" class="form-check-input me-3 fs-5" ${track.selected ? 'checked' : ''}>
+          <div class="text-truncate">
+            <span class="fw-bold me-2">Track ${index + 1}</span>
+            <small class="text-muted d-block text-truncate">${track.url}</small>
+          </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-shrink-0">
+          <a href="${track.url}" target="_blank" class="btn btn-light btn-sm" onclick="event.stopPropagation();">▶ Preview</a>
+          <button class="btn btn-outline-primary btn-sm copy-single" onclick="event.stopPropagation(); copySingle('${track.url}', this);">📋 Copy</button>
+        </div>
+      `;
+
+      // Toggle selection on card click or checkbox click
+      const checkbox = card.querySelector('input[type="checkbox"]');
+      card.addEventListener('click', () => {
+        track.selected = !track.selected;
+        checkbox.checked = track.selected;
+        card.classList.toggle('selected', track.selected);
+        updateCounter();
+      });
+
+      checkbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        track.selected = checkbox.checked;
+        card.classList.toggle('selected', track.selected);
+        updateCounter();
+      });
+
+      trackList.appendChild(card);
+    });
+
+    updateCounter();
+  }
+
+  function updateCounter() {
+    const count = tracks.filter(t => t.selected).length;
+    selectedCount.textContent = count;
+  }
+
+  selectAllBtn.addEventListener('click', () => {
+    tracks.forEach(t => t.selected = true);
+    renderTracks();
+  });
+
+  deselectAllBtn.addEventListener('click', () => {
+    tracks.forEach(t => t.selected = false);
+    renderTracks();
+  });
+
+  function getSelectedUrls() {
+    return tracks.filter(t => t.selected).map(t => t.url).join('\n');
+  }
+
+  copySelectedBtn.addEventListener('click', () => {
+    const selectedText = getSelectedUrls();
+    if (!selectedText) return alert('No tracks selected!');
+
+    navigator.clipboard.writeText(selectedText).then(() => {
+      const origText = copySelectedBtn.textContent;
+      copySelectedBtn.textContent = '✅ Copied to Clipboard!';
+      setTimeout(() => copySelectedBtn.textContent = origText, 1500);
     });
   });
-</script>
 
+  downloadTxtBtn.addEventListener('click', () => {
+    const selectedText = getSelectedUrls();
+    if (!selectedText) return alert('No tracks selected!');
+
+    const blob = new Blob([selectedText], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'songs.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  function copySingle(url, btnElement) {
+    navigator.clipboard.writeText(url).then(() => {
+      const orig = btnElement.textContent;
+      btnElement.textContent = 'Copied!';
+      setTimeout(() => btnElement.textContent = orig, 1200);
+    });
+  }
+</script>
 </body>
 </html>
