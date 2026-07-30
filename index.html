@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Batch Track Selector</title>
+  <title>YouTube Album & Multi-Downloader Selector</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f6f9; padding: 2rem 0; font-family: system-ui, -apple-system, sans-serif; }
-    .container { max-width: 800px; }
+    .container { max-width: 850px; }
     .track-card {
       background: #fff;
       border: 1px solid #e9ecef;
@@ -26,8 +26,8 @@
       background: #111827;
       color: white;
       border-radius: 12px;
-      padding: 14px 20px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      padding: 16px 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
     }
   </style>
 </head>
@@ -35,45 +35,56 @@
 
 <div class="container">
   <div class="text-center mb-4">
-    <h2 class="fw-bold">🎵 YouTube Album & Track Selector</h2>
-    <p class="text-muted">Paste your video links, check the songs you want, and copy them for your downloader.</p>
+    <h2 class="fw-bold">🎵 YouTube Album & Multi-Downloader</h2>
+    <p class="text-muted">Select your songs, pick your preferred downloader service, and start downloading automatically.</p>
   </div>
 
   <!-- Input Card -->
   <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-4">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <label class="form-label fw-bold mb-0">1. Paste Album / Playlist Links:</label>
+        <label class="form-label fw-bold mb-0">1. Paste YouTube Album / Song Links:</label>
         <button id="presetBtn" class="btn btn-outline-secondary btn-sm">⚡ Load Thatohatsi Preset</button>
       </div>
       <textarea id="rawInput" class="form-control mb-3" rows="5" placeholder="Paste YouTube links here (one per line or mixed in text)..."></textarea>
-      <button id="parseBtn" class="btn btn-primary w-100 fw-bold">Load Tracks for Selection</button>
+      <button id="parseBtn" class="btn btn-primary w-100 fw-bold">Load Songs for Selection</button>
     </div>
   </div>
 
   <!-- Selection Area -->
   <div id="selectionArea" class="d-none">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="fw-bold mb-0">2. Select Your Songs</h5>
+      <h5 class="fw-bold mb-0">2. Select Songs to Download</h5>
       <div>
         <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-1">Select All</button>
         <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">Deselect All</button>
       </div>
     </div>
 
-    <!-- Track Cards List -->
     <div id="trackList" class="mb-4"></div>
   </div>
 
-  <!-- Sticky Bottom Bar -->
-  <div id="stickyBar" class="sticky-bar d-flex justify-content-between align-items-center d-none">
-    <div>
-      <span class="fw-bold fs-5" id="selectedCount">0</span>
-      <span class="text-white-50 ms-1">tracks selected</span>
-    </div>
-    <div class="d-flex gap-2">
-      <button id="downloadTxtBtn" class="btn btn-outline-light btn-sm fw-bold">💾 Download songs.txt</button>
-      <button id="copySelectedBtn" class="btn btn-success btn-sm fw-bold">📋 Copy Selected Links</button>
+  <!-- Sticky Bottom Bar with Downloader Choice -->
+  <div id="stickyBar" class="sticky-bar d-none">
+    <div class="row align-items-center g-2">
+      <div class="col-md-3">
+        <span class="fw-bold fs-5" id="selectedCount">0</span>
+        <span class="text-white-50">songs selected</span>
+      </div>
+      <div class="col-md-5">
+        <select id="downloaderSelect" class="form-select form-select-sm bg-dark text-white border-secondary fw-bold">
+          <option value="ytdlp-bat">⚡ Windows Auto-Downloader (.bat script via yt-dlp)</option>
+          <option value="ytdlp-sh">🍎 Mac Auto-Downloader (.sh script via yt-dlp)</option>
+          <option value="cobalt">🌐 Cobalt.tools (Ad-Free Downloader)</option>
+          <option value="y2mate">🔴 Y2Mate Web Downloader</option>
+          <option value="savefrom">🟢 SaveFrom / SSYouTube</option>
+          <option value="loader">🔵 Loader.to MP3 Service</option>
+        </select>
+      </div>
+      <div class="col-md-4 d-flex gap-2 justify-content-end">
+        <button id="copyBtn" class="btn btn-outline-light btn-sm fw-bold">📋 Copy Links</button>
+        <button id="runDownloadBtn" class="btn btn-success btn-sm fw-bold px-3">🚀 Download Selected</button>
+      </div>
     </div>
   </div>
 </div>
@@ -88,19 +99,17 @@
   const selectedCount = document.getElementById('selectedCount');
   const selectAllBtn = document.getElementById('selectAllBtn');
   const deselectAllBtn = document.getElementById('deselectAllBtn');
-  const copySelectedBtn = document.getElementById('copySelectedBtn');
-  const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+  const downloaderSelect = document.getElementById('downloaderSelect');
+  const runDownloadBtn = document.getElementById('runDownloadBtn');
+  const copyBtn = document.getElementById('copyBtn');
 
-  // Sample Thatohatsi track URLs
   const THATOHATSI_PRESET = [
-    "https://www.youtube.com/watch?v=7Elq62H4vGo", // Best of Thatohatsi Mix
-    "https://www.youtube.com/watch?v=kYJ4a8S0Y4Y", // Amalanga (Piano City)
-    "https://www.youtube.com/watch?v=w6B-Q8T4P50", // Hlanya
-    "https://www.youtube.com/watch?v=12345678901", // Ama hem hem
-    "https://www.youtube.com/watch?v=23456789012"  // Bang'bonile
+    "https://www.youtube.com/watch?v=7Elq62H4vGo",
+    "https://www.youtube.com/watch?v=kYJ4a8S0Y4Y",
+    "https://www.youtube.com/watch?v=w6B-Q8T4P50"
   ].join('\n');
 
-  let tracks = []; // Stores { id, url, selected }
+  let tracks = [];
 
   presetBtn.addEventListener('click', () => {
     rawInput.value = THATOHATSI_PRESET;
@@ -110,7 +119,6 @@
     const text = rawInput.value.trim();
     if (!text) return alert('Please paste some links first!');
 
-    // Regex to match YouTube video IDs
     const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
     const matches = [];
     let match;
@@ -122,7 +130,7 @@
     const uniqueIds = [...new Set(matches)];
 
     if (uniqueIds.length === 0) {
-      return alert('No valid YouTube links found in the text.');
+      return alert('No valid YouTube links found.');
     }
 
     tracks = uniqueIds.map(id => ({
@@ -146,17 +154,15 @@
         <div class="d-flex align-items-center me-3" style="min-width: 0;">
           <input type="checkbox" class="form-check-input me-3 fs-5" ${track.selected ? 'checked' : ''}>
           <div class="text-truncate">
-            <span class="fw-bold me-2">Track ${index + 1}</span>
+            <span class="fw-bold me-2">Song ${index + 1}</span>
             <small class="text-muted d-block text-truncate">${track.url}</small>
           </div>
         </div>
         <div class="d-flex gap-2 align-items-center flex-shrink-0">
           <a href="${track.url}" target="_blank" class="btn btn-light btn-sm" onclick="event.stopPropagation();">▶ Preview</a>
-          <button class="btn btn-outline-primary btn-sm copy-single" onclick="event.stopPropagation(); copySingle('${track.url}', this);">📋 Copy</button>
         </div>
       `;
 
-      // Toggle selection on card click or checkbox click
       const checkbox = card.querySelector('input[type="checkbox"]');
       card.addEventListener('click', () => {
         track.selected = !track.selected;
@@ -193,40 +199,82 @@
     renderTracks();
   });
 
-  function getSelectedUrls() {
-    return tracks.filter(t => t.selected).map(t => t.url).join('\n');
-  }
-
-  copySelectedBtn.addEventListener('click', () => {
-    const selectedText = getSelectedUrls();
-    if (!selectedText) return alert('No tracks selected!');
-
-    navigator.clipboard.writeText(selectedText).then(() => {
-      const origText = copySelectedBtn.textContent;
-      copySelectedBtn.textContent = '✅ Copied to Clipboard!';
-      setTimeout(() => copySelectedBtn.textContent = origText, 1500);
+  copyBtn.addEventListener('click', () => {
+    const selected = tracks.filter(t => t.selected).map(t => t.url).join('\n');
+    if (!selected) return alert('No songs selected!');
+    navigator.clipboard.writeText(selected).then(() => {
+      copyBtn.textContent = '✅ Copied!';
+      setTimeout(() => copyBtn.textContent = '📋 Copy Links', 1500);
     });
   });
 
-  downloadTxtBtn.addEventListener('click', () => {
-    const selectedText = getSelectedUrls();
-    if (!selectedText) return alert('No tracks selected!');
+  // DOWNLOADER DISPATCHER LOGIC
+  runDownloadBtn.addEventListener('click', () => {
+    const selected = tracks.filter(t => t.selected);
+    if (selected.length === 0) return alert('Please select at least one song!');
 
-    const blob = new Blob([selectedText], { type: 'text/plain' });
+    const choice = downloaderSelect.value;
+
+    if (choice === 'ytdlp-bat') {
+      // Windows Batch File
+      let scriptContent = `@echo off\necho Downloading ${selected.length} songs as MP3...\n\n`;
+      selected.forEach(t => {
+        scriptContent += `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "%%(title)s.%%(ext)s" "${t.url}"\n`;
+      });
+      scriptContent += `\necho Done! All songs downloaded.\npause\n`;
+
+      triggerFileDownload(scriptContent, 'download_songs.bat', 'text/plain');
+
+    } else if (choice === 'ytdlp-sh') {
+      // Mac / Linux Shell Script
+      let scriptContent = `#!/bin/bash\necho "Downloading ${selected.length} songs as MP3..."\n\n`;
+      selected.forEach(t => {
+        scriptContent += `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "%(title)s.%(ext)s" "${t.url}"\n`;
+      });
+      scriptContent += `\necho "Done! All songs downloaded."\n`;
+
+      triggerFileDownload(scriptContent, 'download_songs.sh', 'text/plain');
+
+    } else if (choice === 'cobalt') {
+      // Cobalt.tools
+      selected.forEach((t, i) => {
+        setTimeout(() => {
+          window.open(`https://cobalt.tools/#${encodeURIComponent(t.url)}`, '_blank');
+        }, i * 400);
+      });
+
+    } else if (choice === 'y2mate') {
+      // Y2Mate redirect
+      selected.forEach((t, i) => {
+        const y2url = t.url.replace('youtube.com', 'youtubepp.com');
+        setTimeout(() => window.open(y2url, '_blank'), i * 400);
+      });
+
+    } else if (choice === 'savefrom') {
+      // SSYouTube redirect
+      selected.forEach((t, i) => {
+        const ssUrl = t.url.replace('youtube.com', 'ssyoutube.com');
+        setTimeout(() => window.open(ssUrl, '_blank'), i * 400);
+      });
+
+    } else if (choice === 'loader') {
+      // Loader.to MP3 page
+      selected.forEach((t, i) => {
+        setTimeout(() => {
+          window.open(`https://loader.to/en1/1080p-youtube-downloader.html?start=1&end=1&format=mp3&url=${encodeURIComponent(t.url)}`, '_blank');
+        }, i * 400);
+      });
+    }
+  });
+
+  function triggerFileDownload(content, filename, type) {
+    const blob = new Blob([content], { type: type });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'songs.txt';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  });
-
-  function copySingle(url, btnElement) {
-    navigator.clipboard.writeText(url).then(() => {
-      const orig = btnElement.textContent;
-      btnElement.textContent = 'Copied!';
-      setTimeout(() => btnElement.textContent = orig, 1200);
-    });
   }
 </script>
 </body>
