@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Track Selector (YTDown Powered)</title>
+  <title>YouTube Track Selector (Clipboard Sync)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f6f9; padding: 2rem 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -35,15 +35,15 @@
 
 <div class="container">
   <div class="text-center mb-4">
-    <h2 class="fw-bold">🎵 Track Selector & YTDown Integration</h2>
-    <p class="text-muted">Select tracks to send directly to <strong>YTDown (app.ytdown.to)</strong> without hitting rate limits.</p>
+    <h2 class="fw-bold">🎵 Track Selector & YTDown Clipboard Sync</h2>
+    <p class="text-muted">Select tracks to automatically copy them to your clipboard and open <strong>app.ytdown.to</strong>.</p>
   </div>
 
   <!-- Input Card -->
   <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-4">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <label class="form-label fw-bold mb-0">1. Paste Album / Playlist Links:</label>
+        <label class="form-label fw-bold mb-0">1. Paste YouTube Album / Song Links:</label>
         <button id="presetBtn" class="btn btn-outline-secondary btn-sm">⚡ Load Thatohatsi Preset</button>
       </div>
       <textarea id="rawInput" class="form-control mb-3" rows="5" placeholder="Paste YouTube video or playlist links here..."></textarea>
@@ -64,7 +64,7 @@
     <div id="trackList" class="mb-4"></div>
   </div>
 
-  <!-- Sticky Bottom Bar with YTDown Primary Option -->
+  <!-- Sticky Bottom Bar -->
   <div id="stickyBar" class="sticky-bar d-none">
     <div class="row align-items-center g-2">
       <div class="col-md-3">
@@ -73,15 +73,14 @@
       </div>
       <div class="col-md-5">
         <select id="downloaderSelect" class="form-select form-select-sm bg-dark text-white border-secondary fw-bold">
-          <option value="ytdown" selected>⚡ YTDown (app.ytdown.to) [Primary]</option>
+          <option value="ytdown" selected>⚡ Auto-Copy & Open YTDown (app.ytdown.to)</option>
           <option value="ytdlp-bat">💻 Windows Auto-Downloader (.bat / yt-dlp)</option>
           <option value="cobalt">🌐 Cobalt.tools</option>
-          <option value="y2mate">🔴 Y2Mate</option>
         </select>
       </div>
       <div class="col-md-4 d-flex gap-2 justify-content-end">
-        <button id="copyBtn" class="btn btn-outline-light btn-sm fw-bold">📋 Copy Links</button>
-        <button id="runDownloadBtn" class="btn btn-success btn-sm fw-bold px-3">🚀 Download Selected</button>
+        <button id="copyBtn" class="btn btn-outline-light btn-sm fw-bold">📋 Copy All Selected</button>
+        <button id="runDownloadBtn" class="btn btn-success btn-sm fw-bold px-3">🚀 Copy & Open YTDown</button>
       </div>
     </div>
   </div>
@@ -157,7 +156,7 @@
           </div>
         </div>
         <div class="d-flex gap-2 align-items-center flex-shrink-0">
-          <button class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation(); openSingleInYTDown('${track.url}');">⚡ Open in YTDown</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation(); sendToClipboardAndOpen('${track.url}');">⚡ Send to YTDown</button>
         </div>
       `;
 
@@ -201,32 +200,47 @@
     const selected = tracks.filter(t => t.selected).map(t => t.url).join('\n');
     if (!selected) return alert('No songs selected!');
     navigator.clipboard.writeText(selected).then(() => {
-      copyBtn.textContent = '✅ Copied!';
-      setTimeout(() => copyBtn.textContent = '📋 Copy Links', 1500);
+      copyBtn.textContent = '✅ Copied to Clipboard!';
+      setTimeout(() => copyBtn.textContent = '📋 Copy All Selected', 1500);
     });
   });
 
-  function openSingleInYTDown(url) {
-    // Copy the specific URL to clipboard for fast pasting in YTDown
-    navigator.clipboard.writeText(url);
-    window.open('https://app.ytdown.to/en38/', '_blank');
+  // Direct clipboard sync function
+  async function sendToClipboardAndOpen(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      window.open('https://app.ytdown.to/en38/', '_blank');
+    } catch (err) {
+      alert('Failed to copy link automatically. Please try again.');
+    }
   }
 
   // DOWNLOADER DISPATCHER
-  runDownloadBtn.addEventListener('click', () => {
+  runDownloadBtn.addEventListener('click', async () => {
     const selected = tracks.filter(t => t.selected);
     if (selected.length === 0) return alert('Please select at least one song!');
 
     const choice = downloaderSelect.value;
 
     if (choice === 'ytdown') {
-      // YTDown Mode: Stagger tab opening by 2.5 seconds to prevent "Too many requests" rate-limiting
-      alert(`Opening ${selected.length} track(s) in YTDown. Links are copied to clipboard—tabs will open with a 2.5s delay to prevent server rate limits.`);
+      // Joins selected URLs so they are ready in system clipboard
+      const urlsToCopy = selected.map(t => t.url).join('\n');
       
+      try {
+        await navigator.clipboard.writeText(urlsToCopy);
+      } catch (e) {
+        console.error('Clipboard write failed:', e);
+      }
+
+      // Open YTDown with a 2.5s delay if multiple tabs are opened to avoid rate limits
       selected.forEach((t, i) => {
-        setTimeout(() => {
+        setTimeout(async () => {
+          // Re-copy current track URL right before opening its tab
+          try {
+            await navigator.clipboard.writeText(t.url);
+          } catch (err) {}
           window.open('https://app.ytdown.to/en38/', '_blank');
-        }, i * 2500); // 2.5 second delay per track
+        }, i * 2500);
       });
 
     } else if (choice === 'ytdlp-bat') {
@@ -242,12 +256,6 @@
         setTimeout(() => {
           window.open(`https://cobalt.tools/#${encodeURIComponent(t.url)}`, '_blank');
         }, i * 1000);
-      });
-
-    } else if (choice === 'y2mate') {
-      selected.forEach((t, i) => {
-        const y2url = t.url.replace('youtube.com', 'youtubepp.com');
-        setTimeout(() => window.open(y2url, '_blank'), i * 1000);
       });
     }
   });
